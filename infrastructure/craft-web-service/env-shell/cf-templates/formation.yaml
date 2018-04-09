@@ -68,7 +68,7 @@ Resources:
       AliasTarget:
         DNSName: !GetAtt [AppAlb, DNSName]
         EvaluateTargetHealth: true
-        HostedZoneId: !GetAtt [AppElb, CanonicalHostedZoneNameID]
+        HostedZoneId: !GetAtt [AppAlb, CanonicalHostedZoneNameID]
       HostedZoneName: craftdemodata.com.
       Name: www.craftdemodata.com
       SetIdentifier: craft-data-services-app-us-west-2
