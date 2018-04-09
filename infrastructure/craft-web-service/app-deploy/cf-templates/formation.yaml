@@ -16,10 +16,11 @@ Resources:
       TargetGroupARNs:
         - Fn::ImportValue:
             !Sub vpc-bc481fc5:craft-web-services-web-DefaultTargetGroup:name
+      # internal subnets
       VPCZoneIdentifier: 
-        - "subnet-819a27f8"
-        - "subnet-2368b468"
-        - "subnet-21e6747b"
+        - "subnet-1f9e2366" 
+        - "subnet-baea78e0"
+        - "subnet-d664b89d"
       MaxSize: 1
       MinSize: 1
       HealthCheckType: ELB
@@ -35,12 +36,11 @@ Resources:
   InstanceLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      AssociatePublicIpAddress: false
       BlockDeviceMappings:
         -
           DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 18
+            VolumeSize: 12
             VolumeType: gp2
       IamInstanceProfile:
         Fn::ImportValue:
@@ -64,43 +64,38 @@ Resources:
           mkdir -p /tmp/deploy
           cd /tmp/deploy
 
-          cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName}
-          # else
-            ###### Download artifacts out of s3 ######s
-            # aws s3 cp s3://artifacts-${AWS::AccountId}-${AWS::Region}/${AWS::StackName}.zip.gpg ${AWS::StackName}.zip.gpg
+          ###### Download chef out of s3 ######s
+          # 496911069803-us-west-2-artifacts/chef/cookbooks.zip
+          aws s3 cp s3://${AWS::AccountId}-${AWS::Region}-artifacts/chef/cookbooks.zip ${AWS::StackName}.zip
 
-            # if [ $? -ne 0 ]; then
-            #   # Unrecoverable error, so fail fast
-            #   cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName} --success false
-            # fi
+          if [ $? -ne 0 ]; then
+            # Unrecoverable error, so fail fast
+            cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName} --success false
+          fi
 
-            # unzip -o ${AWS::StackName}.zip -d boxset
-            # mv boxset/*cookbooks*.zip cookbooks.zip
-            # mv boxset/*shell-services*.zip shell-services.zip
+          unzip -o ${AWS::StackName}.zip -d cookbooks
 
-            # ###### Run Chef ######
-            # mkdir -p /var/log/chef
-            # unzip -o cookbooks.zip -d cookbooks
+          # ###### Run Chef ######
+          mkdir -p /var/log/chef
 
-            # cd cookbooks
-            # ls config/solo.rb
-            # ls nodes/nginx.json
+          cd cookbooks
+          ls config/solo.rb
+          ls nodes/web-services/us-west-2/dev.json
 
-            # chef-solo -c config/solo.rb -j nodes/nginx.json -l debug --force-logger
+          chef-solo -c config/solo.rb -j nodes/web-services/us-west-2/dev.json -l debug --force-logger
 
-            if [ $? -eq 0 ]; then
-              # All done!
-              cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName}
-            else
-              # Deploy failed upload logs and die
-              INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`
-              curl -s http://169.254.169.254/latest/user-data > /var/log/user-data.log
-
-              # for log in /var/log/chef/chef.log /var/log/userdata.log /var/log/boot.log /var/log/cloud-init-output.log /app/nginx/logs/access.log /app/nginx/logs/error.log /app/node/shell-services/logs/shell-services-8080.log; do
-              #   [ -f $log ] && aws s3 cp --acl bucket-owner-full-control $log s3://logs-${AWS::AccountId}-${AWS::Region}/failed_deploys/${AWS::StackName}/$INSTANCE_ID/`basename $log`
-              done
-              #shutdown -h now
-            fi
+          if [ $? -eq 0 ]; then
+            # All done!
+            cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName}
+          else
+            # Deploy failed upload logs and die
+            INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`
+            curl -s http://169.254.169.254/latest/user-data > /var/log/user-data.log
+            # flask-west2-prod-west2-logs/fail_deploys/
+            for log in /var/log/chef/chef.log /var/log/userdata.log /var/log/boot.log /var/log/cloud-init-output.log /var/log/nginx/access.log /var/log/nginx/error.log; do
+              [ -f $log ] && aws s3 cp --acl bucket-owner-full-control $log s3://flask-west2-prod-west2-logs/fail_deploys/${AWS::StackName}/$INSTANCE_ID/`basename $log`
+            done
+            shutdown -h now
           fi
 
 Outputs:

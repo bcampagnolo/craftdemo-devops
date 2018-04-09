@@ -3,23 +3,29 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: craft-demo-base-app-env-shell
 
 Resources:
-  CraftDemoAlbSg:
+  DataServicesElbSg:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: CraftDemoAlbSg
+      GroupDescription: DataServicesElbSg
       VpcId: vpc-bc481fc5
       Tags:
       - Key: Name
-        Value: CraftDemoAlbSg
+        Value: DataServicesElbSg
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 5000
+        ToPort: 5000
+        SourceSecurityGroupId:
+          Ref: WebServicesAppSg
 
-  CraftDemoAppSg:
+  DataServicesAppSg:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: CraftDemoAppSg
+      GroupDescription: DataServicesAppSg
       VpcId: vpc-bc481fc5
       Tags:
       - Key: Name
-        Value: CraftDemoAppSg
+        Value: DataServicesAppSg
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 22
@@ -29,17 +35,17 @@ Resources:
         FromPort: 80
         ToPort: 80
         SourceSecurityGroupId:
-          Ref: CraftDemoAlbSg
+          Ref: DataServicesElbSg
       - IpProtocol: tcp
         FromPort: 443
         ToPort: 443
         SourceSecurityGroupId:
-          Ref: CraftDemoAlbSg
+          Ref: DataServicesElbSg
       - IpProtocol: tcp
         FromPort: 5000
         ToPort: 5000
         SourceSecurityGroupId:
-          Ref: CraftDemoAlbSg
+          Ref: DataServicesElbSg
 
   WebServicesAlbSg:
     Type: AWS::EC2::SecurityGroup
@@ -49,6 +55,15 @@ Resources:
       Tags:
       - Key: Name
         Value: WebServicesAlbSg
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
        
   WebServicesAppSg:
     Type: AWS::EC2::SecurityGroup
@@ -91,12 +106,13 @@ Resources:
         FromPort: 3306
         ToPort: 3306
         SourceSecurityGroupId:
-          Ref: CraftDemoAppSg
+          Ref: DataServicesAppSg
       - IpProtocol: tcp
         FromPort: 3306
         ToPort: 3306
         SourceSecurityGroupId:
-          Ref: CraftDemoAppSg
+          Ref: WebServicesAppSg
+          
 Outputs:
   CloudFormationUpdateHack:
     Description: Allows us to perform no-op updates on a stack by changing only this value every time.
@@ -109,14 +125,14 @@ Outputs:
     Export:
       Name: !Sub vpc-bc481fc5:craft-demo-base-app-WebServicesAlbSg:id
     Value: !Ref WebServicesAlbSg
-  CraftDemoAlbSgId:
+  DataServicesElbSgId:
     Export:
-      Name: !Sub vpc-bc481fc5:craft-demo-base-app-CraftDemoAlbSg:id
-    Value: !Ref CraftDemoAlbSg
-  CraftDemoAppSgId:
+      Name: !Sub vpc-bc481fc5:craft-demo-base-app-DataServicesElbSg:id
+    Value: !Ref DataServicesElbSg
+  DataServicesAppSgId:
     Export:
-      Name: !Sub vpc-bc481fc5:craft-demo-base-app-CraftDemoAppSg:id
-    Value: !Ref CraftDemoAppSg
+      Name: !Sub vpc-bc481fc5:craft-demo-base-app-DataServicesAppSg:id
+    Value: !Ref DataServicesAppSg
   CraftDemoDbSgId:
     Export:
       Name: !Sub vpc-bc481fc5:craft-demo-base-app-CraftDemoDbSg:id

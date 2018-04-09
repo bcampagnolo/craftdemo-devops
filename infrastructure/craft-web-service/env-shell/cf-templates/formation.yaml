@@ -32,6 +32,13 @@ Resources:
           Resource: !Sub arn:aws:s3:::${AWS::AccountId}-${AWS::Region}-artifacts/*
         - Effect: Allow
           Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          - logs:DescribeLogStreams
+          Resource: !Sub arn:aws:logs:*:*:*
+        - Effect: Allow
+          Action:
           - s3:PutObject
           - s3:PutObjectAcl
           Resource: !Sub arn:aws:s3:::flask-west2-prod-west2-logs/failed_deploys/*
@@ -45,24 +52,35 @@ Resources:
       Roles:
         - !Ref InstanceRole
 
-  AppAlbRecordSet:
+  AppAlbRegionDnsRs:
     Type: 'AWS::Route53::RecordSet'
     Properties:
       AliasTarget:
-        HostedZoneId: !GetAtt 'AppAlb.CanonicalHostedZoneID'
         DNSName: !GetAtt 'AppAlb.DNSName'
-      HostedZoneId: Z1FC5F6CVERE3C
-      Name: !Sub
-      - '${SubDomainName}.${HostedZoneName}'
-      - SubDomainName: www
-        HostedZoneName: craftdemodata.com
+        HostedZoneId: !GetAtt 'AppAlb.CanonicalHostedZoneID'
+      HostedZoneName: craftdemodata.com.
+      Name: web-us-west-2.craftdemodata.com
       Type: A
+
+  AppAlbTopLevelDnsRs:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt [AppAlb, DNSName]
+        EvaluateTargetHealth: true
+        HostedZoneId: !GetAtt [AppElb, CanonicalHostedZoneNameID]
+      HostedZoneName: craftdemodata.com.
+      Name: www.craftdemodata.com
+      SetIdentifier: craft-data-services-app-us-west-2
+      Type: A
+      Weight: 100 # By default, the regions are set up active-active
+
 
   DefaultTargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
       HealthCheckIntervalSeconds: 15
-      HealthCheckPath: '/health'
+      HealthCheckPath: '/'
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 10
       HealthyThresholdCount: 2
@@ -81,12 +99,11 @@ Resources:
       SecurityGroups:
         - Fn::ImportValue:
             !Sub vpc-bc481fc5:craft-demo-base-app-WebServicesAlbSg:id
-        - Fn::ImportValue:
-            !Sub vpc-bc481fc5:intuit-cidr-ingress-tcp-443:id
+      # external subnets
       Subnets:
-        - "subnet-1f9e2366"
-        - "subnet-baea78e0"
-        - "subnet-d664b89d"
+        - "subnet-2368b468"
+        - "subnet-819a27f8"
+        - "subnet-21e6747b"
 
   HttpListener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'

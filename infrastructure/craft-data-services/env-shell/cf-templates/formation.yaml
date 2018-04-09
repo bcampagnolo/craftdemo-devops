@@ -35,6 +35,13 @@ Resources:
           - s3:PutObject
           - s3:PutObjectAcl
           Resource: !Sub arn:aws:s3:::flask-west2-prod-west2-logs/failed_deploys/*
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          - logs:DescribeLogStreams
+          Resource: !Sub arn:aws:logs:*:*:*
       Roles:
       - Ref: InstanceRole
 
@@ -52,7 +59,7 @@ Resources:
         DNSName: !GetAtt [AppElb, DNSName]
         HostedZoneId: !GetAtt [AppElb, CanonicalHostedZoneNameID]
       HostedZoneName: craftdemodata.com.
-      Name: app-us-wset-2.craftdemodata.com
+      Name: app-us-west-2.craftdemodata.com
       Type: A
 
   AppElbTopLevelDnsRs:
@@ -77,7 +84,8 @@ Resources:
       CrossZone: true
       SecurityGroups:
         - Fn::ImportValue:
-            !Sub vpc-bc481fc5:craft-demo-base-app-CraftDemoAppSg:id
+            !Sub vpc-bc481fc5:craft-demo-base-app-DataServicesAppSg:id
+      #internal subnets
       Subnets: 
         - "subnet-1f9e2366"
         - "subnet-baea78e0"
