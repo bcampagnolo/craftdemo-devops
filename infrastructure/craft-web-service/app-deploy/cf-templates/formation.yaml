@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: craft-web-server
+
+#Parameters:
+
+Resources:
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT1200S
+    Properties:
+      LaunchConfigurationName: !Ref InstanceLaunchConfig
+      TargetGroupARNs:
+        - Fn::ImportValue:
+            !Sub vpc-bc481fc5:craft-web-services-web-DefaultTargetGroup:name
+      VPCZoneIdentifier: 
+        - "subnet-819a27f8"
+        - "subnet-2368b468"
+        - "subnet-21e6747b"
+      MaxSize: 1
+      MinSize: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 720
+      TerminationPolicies:
+      - OldestInstance
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+        PropagateAtLaunch: true
+
+  InstanceLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      BlockDeviceMappings:
+        -
+          DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 18
+            VolumeType: gp2
+      IamInstanceProfile:
+        Fn::ImportValue:
+          !Sub vpc-bc481fc5:craft-web-services-web-InstanceRoleProfile:name
+      KeyName: flask-key-west2
+      ImageId: ami-7f43f307
+      InstanceType: t2.micro
+      SecurityGroups:
+        - Fn::ImportValue:
+            !Sub vpc-bc481fc5:craft-demo-base-app-WebServicesAppSg:id
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+
+          # Temporarily override the default umask of 0077
+          umask 0022
+
+          # Set the default region for the AWS CLI/SDK
+          echo export AWS_DEFAULT_REGION=${AWS::Region} > /etc/profile.d/aws_default_region.sh && . /etc/profile.d/aws_default_region.sh
+
+          mkdir -p /tmp/deploy
+          cd /tmp/deploy
+
+          cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName}
+          # else
+            ###### Download artifacts out of s3 ######s
+            # aws s3 cp s3://artifacts-${AWS::AccountId}-${AWS::Region}/${AWS::StackName}.zip.gpg ${AWS::StackName}.zip.gpg
+
+            # if [ $? -ne 0 ]; then
+            #   # Unrecoverable error, so fail fast
+            #   cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName} --success false
+            # fi
+
+            # unzip -o ${AWS::StackName}.zip -d boxset
+            # mv boxset/*cookbooks*.zip cookbooks.zip
+            # mv boxset/*shell-services*.zip shell-services.zip
+
+            # ###### Run Chef ######
+            # mkdir -p /var/log/chef
+            # unzip -o cookbooks.zip -d cookbooks
+
+            # cd cookbooks
+            # ls config/solo.rb
+            # ls nodes/nginx.json
+
+            # chef-solo -c config/solo.rb -j nodes/nginx.json -l debug --force-logger
+
+            if [ $? -eq 0 ]; then
+              # All done!
+              cfn-signal --region ${AWS::Region} --resource AutoScalingGroup --stack ${AWS::StackName}
+            else
+              # Deploy failed upload logs and die
+              INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`
+              curl -s http://169.254.169.254/latest/user-data > /var/log/user-data.log
+
+              # for log in /var/log/chef/chef.log /var/log/userdata.log /var/log/boot.log /var/log/cloud-init-output.log /app/nginx/logs/access.log /app/nginx/logs/error.log /app/node/shell-services/logs/shell-services-8080.log; do
+              #   [ -f $log ] && aws s3 cp --acl bucket-owner-full-control $log s3://logs-${AWS::AccountId}-${AWS::Region}/failed_deploys/${AWS::StackName}/$INSTANCE_ID/`basename $log`
+              done
+              #shutdown -h now
+            fi
+          fi
+
+Outputs:
+  InstanceAutoScalingGroup:
+    Value: !Ref AutoScalingGroup
+    Description: App instance ID

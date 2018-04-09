@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: craft-web-env-shell
+
+#Parameters:
+
+Resources:
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+
+  InstanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AppRolePolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource: !Sub arn:aws:s3:::${AWS::AccountId}-${AWS::Region}-artifacts/*
+        - Effect: Allow
+          Action:
+          - s3:PutObject
+          - s3:PutObjectAcl
+          Resource: !Sub arn:aws:s3:::flask-west2-prod-west2-logs/failed_deploys/*
+      Roles:
+      - Ref: InstanceRole
+
+  InstanceRoleProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceRole
+
+  AppAlbRecordSet:
+    Type: 'AWS::Route53::RecordSet'
+    Properties:
+      AliasTarget:
+        HostedZoneId: !GetAtt 'AppAlb.CanonicalHostedZoneID'
+        DNSName: !GetAtt 'AppAlb.DNSName'
+      HostedZoneId: Z1FC5F6CVERE3C
+      Name: !Sub
+      - '${SubDomainName}.${HostedZoneName}'
+      - SubDomainName: www
+        HostedZoneName: craftdemodata.com
+      Type: A
+
+  DefaultTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 15
+      HealthCheckPath: '/health'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '200-299'
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-bc481fc5
+      TargetType: instance
+
+  AppAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - Fn::ImportValue:
+            !Sub vpc-bc481fc5:craft-demo-base-app-WebServicesAlbSg:id
+        - Fn::ImportValue:
+            !Sub vpc-bc481fc5:intuit-cidr-ingress-tcp-443:id
+      Subnets:
+        - "subnet-1f9e2366"
+        - "subnet-baea78e0"
+        - "subnet-d664b89d"
+
+  HttpListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+      - TargetGroupArn: !Ref DefaultTargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref AppAlb
+      Port: 80
+      Protocol: HTTP
+
+  HttpsListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      Certificates:
+      - CertificateArn: arn:aws:acm:us-west-2:496911069803:certificate/e503f71e-6335-4e22-a800-d10554aa2d49
+      DefaultActions:
+      - TargetGroupArn: !Ref DefaultTargetGroup
+        Type: forward
+      LoadBalancerArn: !Ref AppAlb
+      Port: 443
+      Protocol: HTTPS
+
+Outputs:
+  CloudFormationUpdateHack:
+    Description: Allows us to perform no-op updates on a stack by changing only this value every time.
+    Value: 20180407-035251
+  InstanceRoleProfileName:
+    Export:
+      Name: !Sub vpc-bc481fc5:craft-web-services-web-InstanceRoleProfile:name
+    Value: !Ref InstanceRoleProfile
+  AppAlbName:
+    Export:
+      Name: !Sub vpc-bc481fc5:craft-web-services-web-AppAlb:name
+    Value: !Ref AppAlb
+  DefaultTargetGroup:
+    Export:
+      Name: !Sub vpc-bc481fc5:craft-web-services-web-DefaultTargetGroup:name
+    Value: !Ref DefaultTargetGroup

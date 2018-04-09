@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <servers>
+        <server>
+            <id>com.carrotgarden.aws.stack</id>
+            <username>${aws_access_key_id}</username>
+            <password>${aws_secret_access_key}</password>
+        </server>
+        <server>
+            <id>com.carrotgarden.aws.compute</id>
+            <username>${aws_access_key_id}</username>
+            <password>${aws_secret_access_key}</password>
+        </server>
+    </servers>
+
+    <mirrors>
+        <mirror>
+            <id>central</id>
+            <mirrorOf>*</mirrorOf>
+            <url>http://nexus.intuit.net/nexus/content/groups/public</url>
+        </mirror>
+    </mirrors>
+</settings>

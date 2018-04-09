@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: craft-data-services-app-env-shell
+
+#Parameters:
+
+Resources:
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+
+  InstanceRolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AppRolePolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource: !Sub arn:aws:s3:::${AWS::AccountId}-${AWS::Region}-artifacts/*
+        - Effect: Allow
+          Action:
+          - s3:PutObject
+          - s3:PutObjectAcl
+          Resource: !Sub arn:aws:s3:::flask-west2-prod-west2-logs/failed_deploys/*
+      Roles:
+      - Ref: InstanceRole
+
+  InstanceRoleProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceRole
+
+  AppElbRegionDnsRs:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt [AppElb, DNSName]
+        HostedZoneId: !GetAtt [AppElb, CanonicalHostedZoneNameID]
+      HostedZoneName: craftdemodata.com.
+      Name: app-us-wset-2.craftdemodata.com
+      Type: A
+
+  AppElbTopLevelDnsRs:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt [AppElb, DNSName]
+        EvaluateTargetHealth: true
+        HostedZoneId: !GetAtt [AppElb, CanonicalHostedZoneNameID]
+      HostedZoneName: craftdemodata.com.
+      Name: app.craftdemodata.com
+      SetIdentifier: craft-data-services-app-us-west-2
+      Type: A
+      Weight: 100 # By default, the regions are set up active-active
+
+  AppElb:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      ConnectionDrainingPolicy:
+        Enabled: true
+        Timeout: 60
+      CrossZone: true
+      SecurityGroups:
+        - Fn::ImportValue:
+            !Sub vpc-bc481fc5:craft-demo-base-app-CraftDemoAppSg:id
+      Subnets: 
+        - "subnet-1f9e2366"
+        - "subnet-baea78e0"
+        - "subnet-d664b89d"
+      Scheme: internal
+      HealthCheck:
+        HealthyThreshold: 2
+        Interval: 5
+        Target: HTTP:5000/health
+        Timeout: 4
+        UnhealthyThreshold: 2
+      Listeners:
+      - InstancePort: 5000
+        LoadBalancerPort: 5000
+        Protocol: TCP
+        PolicyNames: []
+
+Outputs:
+  CloudFormationUpdateHack:
+    Description: Allows us to perform no-op updates on a stack by changing only this value every time.
+    Value: 20180407-035250
+  InstanceRoleProfileName:
+    Export:
+      Name: !Sub vpc-bc481fc5:craft-data-services-app-InstanceRoleProfile:name
+    Value: !Ref InstanceRoleProfile
+  AppElbName:
+    Export:
+      Name: !Sub vpc-bc481fc5:craft-data-services-app-AppElb:name
+    Value: !Ref AppElb

@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: craftdb-db-env-shell
+
+Parameters:
+  DbMasterUsername:
+    NoEcho: true
+    Type: String
+  DbMasterPassword:
+    NoEcho: true
+    Type: String
+
+Resources:
+  RDSDnsRs:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: /hostedzone/Z19A098SBCPUT
+      Name: craft-db-us-west-2.stack.local.
+      Type: CNAME
+      TTL: 300
+      Comment: ""
+      ResourceRecords:
+      - Fn::GetAtt:
+        - RDSDb
+        - Endpoint.Address
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS DB Subnet Group
+      SubnetIds: 
+        - "subnet-1f9e2366"
+        - "subnet-baea78e0"
+        - "subnet-d664b89d"
+
+  RDSDb:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 20
+      DBInstanceClass: db.t2.micro
+      DBName: craftdb
+      DBInstanceIdentifier: craft-db-us-west-2
+      VPCSecurityGroups:
+        - Fn::ImportValue:
+            !Sub vpc-bc481fc5:craft-demo-base-app-CraftDemoDbSg:id
+      DBSubnetGroupName:
+        Ref: RDSSubnetGroup
+      Engine: MySQL
+      EngineVersion: 5.7.21
+      StorageType: gp2
+      AllowMajorVersionUpgrade: true
+      LicenseModel: general-public-license
+      MultiAZ: true
+      PubliclyAccessible: false
+      MasterUsername:
+        Ref: DbMasterUsername
+      MasterUserPassword:
+        Ref: DbMasterPassword
+    DeletionPolicy: Snapshot
+Outputs:
+  CloudFormationUpdateHack:
+    Description: Allows us to perform no-op updates on a stack by changing only this value every time.
+    Value: 20180407-035250
+  RDSDbName:
+    Export:
+      Name: !Sub vpc-bc481fc5:craft-db-RDSDb:endpoint
+    Value:
+      Fn::GetAtt:
+      - RDSDb
+      - Endpoint.Address

@@ -1,0 +1,483 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.intuit.ctg.dream</groupId>
+    <artifactId>dream-data-services-app-deploy</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.build.timestamp.format>yyyyMMdd-HHmmss</maven.build.timestamp.format>
+        <timestamp>${maven.build.timestamp}</timestamp>
+        <gpg_dir>${project.build.directory}/gpg</gpg_dir>
+
+        <boxseturl>${BOXSETURL}</boxseturl>
+        <artifact_version>${ARTIFACTVERSION}</artifact_version>
+
+        <!-- Flag to help with local testing -->
+        <local>false</local>
+        <use.boxset.cookbooks>true</use.boxset.cookbooks>
+        <cookbooks.version>LATEST</cookbooks.version>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>2.10</version>
+                <executions>
+                    <execution>
+                        <id>download-cookbooks-for-local-testing</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                               <artifactItem>
+                                    <groupId>com.intuit.ctg.devops.chef</groupId>
+                                    <artifactId>dh-cookbooks</artifactId>
+                                    <version>${cookbooks.version}</version>
+                                    <type>zip</type>
+                                    <outputDirectory>${project.build.directory}/boxset</outputDirectory>
+                                    <destFileName>com.intuit.ctg.dream.dh-cookbooks-local.zip</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                            <excludeTransitive>true</excludeTransitive>
+                            <skip>${use.boxset.cookbooks}</skip>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>properties-maven-plugin</artifactId>
+                <version>1.0.0</version>
+                <executions>
+                    <execution>
+                        <id>load-environment-properties</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>read-project-properties</goal>
+                        </goals>
+                        <configuration>
+                            <files>
+                                <!--
+                                    This is the vpc.properties file we pulled from nexus
+                                -->
+                                <!-- <file>${project.build.directory}/${vpc_id}.properties</file> -->
+                                <file>${project.basedir}/properties/${region}/${environment}.properties</file>
+                            </files>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>load-env-shell-properties</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>read-project-properties</goal>
+                        </goals>
+                        <configuration>
+                            <files>
+                                <!--
+                                <file>${project.build.directory}/base-environment-shell.properties</file>
+                                -->
+
+                                <!--
+                                    This is still needed to clean up the old app deploy stack after deployment completes.
+                                    Carrot-garden needs the load balancer name to determine which stack to delete. There
+                                    may be a workaround for this - I did not dig deep here.
+                                -->
+                                <file>${project.build.directory}/environment-shell.properties</file>
+                            </files>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>2.6</version>
+                <executions>
+                    <execution>
+                        <id>publish-prepare</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/cf-templates</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>1.4.0</version>
+                <executions>
+                    <execution>
+                        <id>download-boxset</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <skip>false</skip>
+                            <includeProjectDependencies>false</includeProjectDependencies>
+                            <includePluginDependencies>true</includePluginDependencies>
+                            <executableDependency>
+                                <groupId>com.intuit.ctg.devops.utilities</groupId>
+                                <artifactId>boxset-nexus-utility-lib</artifactId>
+                            </executableDependency>
+                            <mainClass>com.intuit.ctg.devops.utilities.boxset.NexusUtil</mainClass>
+                            <arguments>
+                                <argument>--url</argument>
+                                <argument>${boxseturl}</argument>
+                                <argument>--outputDir</argument>
+                                <argument>${project.build.directory}/boxset</argument>
+                                <argument>--noparent</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.intuit.ctg.devops.utilities</groupId>
+                        <artifactId>boxset-nexus-utility-lib</artifactId>
+                        <version>1.0.4</version>
+                        <type>jar</type>
+                        <classifier>jar-with-dependencies</classifier>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <plugin>
+                <groupId>com.carrotgarden.maven.intuit</groupId>
+                <artifactId>carrot-maven-aws-plugin</artifactId>
+                <version>4.1.1</version>
+
+                <configuration>
+                    <!-- Cloudformation Stack -->
+                    <stackServerId>com.carrotgarden.aws.stack</stackServerId>
+                    <stackName>${stack_name}</stackName>
+                    <stackTemplateFile>${project.build.directory}/formation.template</stackTemplateFile>
+                    <stackPropertiesInputFile>${project.build.directory}/formation.properties</stackPropertiesInputFile>
+                    <stackTimeout>${stack_creation_timeout}</stackTimeout>
+
+                    <autoScalingGroupNameToExclude>${stack_name}</autoScalingGroupNameToExclude>
+                    <loadBalancerId>${AppElb}</loadBalancerId>
+                    <pathToStackNamesFile>${project.build.directory}/stacksToBeDeleted.txt</pathToStackNamesFile>
+                    <onlyInAvailabilityZones>${availability_zones}</onlyInAvailabilityZones>
+                    <hasIAMCapability>true</hasIAMCapability>
+
+                    <computeServerId>com.carrotgarden.aws.compute</computeServerId>
+                    <formationEndpoint>https://cloudformation.${region}.amazonaws.com</formationEndpoint>
+                    <ec2Endpoint>https://ec2.${region}.amazonaws.com</ec2Endpoint>
+                    <loadBalancerEndpoint>https://elasticloadbalancing.${region}.amazonaws.com</loadBalancerEndpoint>
+
+                    <proxyAddress>${epo_http_proxy}</proxyAddress>
+                    <proxyPort>${epo_http_proxy_port}</proxyPort>
+                </configuration>
+
+                <executions>
+                    <!-- Step 0: upload deployment artifacts to s3 -->
+                    <execution>
+                        <id>publish artifacts to s3</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>upload-to-s3</goal>
+                        </goals>
+                        <configuration>
+                            <fileOrDirectory>${project.build.directory}/s3/</fileOrDirectory>
+                            <bucketName>${s3_artifacts_bucket}</bucketName>
+                            <useS3ServerSideEncryption>true</useS3ServerSideEncryption>
+                        </configuration>
+                    </execution>
+
+                    <!-- Step 1: Create Cloud formation Stack and related instance(s) ... and then attach to ELB -->
+                    <execution>
+                        <id>stack-create</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>cloud-formation-create</goal>
+                        </goals>
+                    </execution>
+
+                    <!-- Step 2: Identify old stack(s) to delete -->
+                    <!--
+                        This is still needed to clean up the old app deploy stack after deployment completes.
+                        Carrot-garden needs the load balancer name to determine which stack to delete. There
+                        may be a workaround for this - I did not dig deep here.
+                    -->
+                    <execution>
+                        <id>get-environment-shell-resources</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>cloud-formation-describe-resources</goal>
+                        </goals>
+                        <configuration>
+                            <stackNamePrefix>${stack_name_prefix_env_shell}</stackNamePrefix>
+                            <stackDescriptionPrefix>${stack_name_prefix_env_shell}</stackDescriptionPrefix>
+                            <resourceTypes>AWS::EC2::SecurityGroup,AWS::ElasticLoadBalancing::LoadBalancer</resourceTypes>
+                            <stackResourcesPropertiesFile>${project.build.directory}/environment-shell.properties</stackResourcesPropertiesFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>old-delete</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>delete-old-autoscaling-group</goal>
+                        </goals>
+                    </execution>
+
+                    <!-- Step 3: Delete old stack(s) -->
+                    <execution>
+                        <id>stack-delete</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>cloud-formation-delete-multiple-from-file</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
+                <executions>
+                    <execution>
+                        <id>grab-vpc_id-from-${environment}.properties</id>
+                        <phase>validate</phase>
+                        <configuration>
+                            <skip>false</skip>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <loadproperties srcFile="${project.basedir}/properties/${region}/${environment}.properties">
+                                    <filterchain>
+                                        <linecontains>
+                                            <contains value="vpc_id"/>
+                                        </linecontains>
+                                    </filterchain>
+                                </loadproperties>
+
+                                <echo message="#############################################################################"/>
+                                <echo/>
+                                <echo message="VPC ID: ${vpc_id}"/>
+                                <echo/>
+                                <echo message="#############################################################################"/>
+                                <echo/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>load-ami-properties-from-boxset</id>
+                        <phase>initialize</phase>
+                        <configuration>
+                            <skip>false</skip>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <!--
+                                    We don't know the name of the ami properties file, so we use some ant magic to
+                                    pattern match on the filename and then load it as a property file to access the
+                                    properties defined within it.
+                                -->
+                                <fileset id="ami_boxset_property_fileset_id" dir="${project.build.directory}/boxset" includes="com.intuit.ctg.devops.ami*${region}*.properties"/>
+                                <property name="ami_boxset_property_file_name" refid="ami_boxset_property_fileset_id"/>
+                                <property file="${project.build.directory}/boxset/${ami_boxset_property_file_name}"/>
+                                <loadfile property="ami_properties_file" srcFile="${project.build.directory}/boxset/${ami_boxset_property_file_name}"/>
+
+                                <echo message="#############################################################################"/>
+                                <echo/>
+                                <echo message="Source AMI Info:"/>
+                                <echo/>
+                                <echo message="${ami_properties_file}"/>
+                                <echo/>
+                                <echo message="#############################################################################"/>
+                                <echo/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>delete-boxset-cookbooks</id>
+                        <phase>initialize</phase>
+                        <configuration>
+                            <skip>${use.boxset.cookbooks}</skip>
+                            <exportAntProperties>true</exportAntProperties>
+                            <target>
+                                <delete >
+                                    <fileset dir="${project.build.directory}/boxset" includes="com.intuit.ctg.devops.chef.dh-cookbooks-*.zip" excludes="com.intuit.ctg.devops.chef.dh-cookbooks-local.zip"/>
+                                </delete>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>zip-and-sign-boxset</id>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <exportAntProperties>true</exportAntProperties>
+                            <skip>false</skip>
+                            <target>
+                                <echo message="Zipping up the contents of the boxset"/>
+
+                                <zip destfile="${project.build.directory}/${stack_name}.zip">
+                                    <zipfileset dir="${project.build.directory}/boxset"/>
+                                </zip>
+
+                                <delete dir="${gpg_dir}/.gnupg"/>
+                                <mkdir dir="${gpg_dir}/.gnupg"/>
+
+                                <echo/>
+                                <echo message="Generating a password for the gpg key"/>
+
+                                <exec executable="openssl" outputproperty="gpg_passphrase" failonerror="true">
+                                    <arg value="rand" />
+                                    <arg value="-base64" />
+                                    <arg value="15" />
+                                </exec>
+
+                                <copy file="${project.basedir}/gpg.def" tofile="${gpg_dir}/gpg.def">
+                                    <filterchain>
+                                        <expandproperties/>
+                                    </filterchain>
+                                </copy>
+
+                                <!--
+                                    In some cases there is not enough entropy to generate a new gpg key unattended. This tends to happen on our EPOs
+                                    where there is no regular human interaction. If there is not enough entropy, the process will hang. To protect
+                                    against that we call the rngd -r /dev/urandom prior to generating the key on unix based systems. This call blocks
+                                    until there is 4096 (the max) amount of entropy seeded
+                                    (http://aaronhawley.livejournal.com/10807.html).
+                                -->
+                                <exec executable="/sbin/rngd" osfamily="unix" failonerror="true" >
+                                    <arg value="-r"/>
+                                    <arg value="/dev/urandom"/>
+                                    <arg value="-W"/>
+                                    <arg value="4096"/>
+                                </exec>
+
+                                <echo/>
+                                <echo message="Creating a gpg key in ${gpg_dir}/.gnupg using ${project.basedir}/gpg.def"/>
+
+                                <exec executable="gpg" failonerror="true">
+                                    <arg value="--homedir"/>
+                                    <arg value="${gpg_dir}/.gnupg"/>
+                                    <arg value="--batch"/>
+                                    <arg value="--gen-key"/>
+                                    <arg value="${gpg_dir}/gpg.def"/>
+                                </exec>
+
+                                <echo/>
+                                <echo message="Encrypting ${project.build.directory}/${stack_name}.zip with the gpg key to ${project.build.directory}/s3/${application_name}/${environment}/${region}/${stack_name}.zip.gpg"/>
+
+                                <mkdir dir="${project.build.directory}/s3/${application_name}/${environment}"/>
+
+                                <exec executable="gpg" failonerror="true">
+                                    <arg value="--homedir"/>
+                                    <arg value="${gpg_dir}/.gnupg"/>
+                                    <arg value="--always-trust"/>
+                                    <arg value="--batch"/>
+                                    <arg value="--yes"/>
+                                    <arg value="--passphrase"/>
+                                    <arg value="${gpg_passphrase}"/>
+                                    <arg value="-u"/>
+                                    <arg value="ctgdevops-boxset-key"/>
+                                    <arg value="-r"/>
+                                    <arg value="ctgdevops-boxset-key"/>
+                                    <arg value="-s"/>
+                                    <arg value="-o"/>
+                                    <arg value="${project.build.directory}/s3/${application_name}/${environment}/${stack_name}.zip.gpg"/>
+                                    <arg value="-e"/>
+                                    <arg value="${project.build.directory}/${stack_name}.zip"/>
+                                </exec>
+
+                                <echo/>
+                                <echo message="Exporting the gpg key so we can base64 encode it"/>
+
+                                <exec executable="gpg" failonerror="true">
+                                    <arg value="--homedir"/>
+                                    <arg value="${gpg_dir}/.gnupg"/>
+                                    <arg value="--output"/>
+                                    <arg value="${gpg_dir}/ctgdevops-boxset-key_private.gpg"/>
+                                    <arg value="--armor"/>
+                                    <arg value="--export-secret-key"/>
+                                    <arg value="ctgdevops-boxset-key"/>
+                                </exec>
+
+                                <echo/>
+                                <echo message="Base64 encoding ${gpg_dir}/ctgdevops-boxset-key_private.gpg to ${gpg_dir}/ctgdevops-boxset-key_private.gpg.base64"/>
+
+                                <exec executable="base64" output="${gpg_dir}/ctgdevops-boxset-key_private.gpg.base64" failonerror="true">
+                                    <arg value="${gpg_dir}/ctgdevops-boxset-key_private.gpg" />
+                                </exec>
+
+                                <echo/>
+                                <echo message="Setting gpg_base64_key to the base64 value of the ${gpg_dir}/ctgdevops-boxset-key_private.gpg key"/>
+
+                                <loadfile property="gpg_base64_key" srcFile="${gpg_dir}/ctgdevops-boxset-key_private.gpg.base64">
+                                    <filterchain>
+                                        <striplinebreaks/>
+                                    </filterchain>
+                                </loadfile>
+
+                                <echo/>
+                                <echo message="Deleting the ${gpg_dir} folder to remove all references to the generated gpg keys"/>
+
+                                <!-- Delete the all references to the gpg key -->
+                                <delete dir="${gpg_dir}"/>
+
+                                <echo/>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>ant-contrib</groupId>
+                        <artifactId>ant-contrib</artifactId>
+                        <version>1.0b3</version>
+                        <exclusions>
+                            <exclusion>
+                                <groupId>ant</groupId>
+                                <artifactId>ant</artifactId>
+                            </exclusion>
+                        </exclusions>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
+    </build>
+
+    <repositories>
+        <repository>
+            <id>central</id>
+            <name>central</name>
+            <url>http://nexus.intuit.net/nexus/content/groups/public</url>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>central</id>
+            <name>central</name>
+            <url>http://nexus.intuit.net/nexus/content/groups/public</url>
+        </pluginRepository>
+    </pluginRepositories>
+</project>
