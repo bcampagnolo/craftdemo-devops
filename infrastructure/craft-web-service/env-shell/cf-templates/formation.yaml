@@ -68,7 +68,7 @@ Resources:
       AliasTarget:
         DNSName: !GetAtt [AppAlb, DNSName]
         EvaluateTargetHealth: true
-        HostedZoneId: !GetAtt [AppAlb, CanonicalHostedZoneNameID]
+        HostedZoneId: !GetAtt [AppAlb, CanonicalHostedZoneID]
       HostedZoneName: craftdemodata.com.
       Name: www.craftdemodata.com
       SetIdentifier: craft-data-services-app-us-west-2
@@ -87,8 +87,8 @@ Resources:
       UnhealthyThresholdCount: 2
       Matcher:
         HttpCode: '200-299'
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
       VpcId: vpc-bc481fc5
       TargetType: instance
 

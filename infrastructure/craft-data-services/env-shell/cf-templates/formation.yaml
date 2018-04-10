@@ -42,6 +42,10 @@ Resources:
           - logs:PutLogEvents
           - logs:DescribeLogStreams
           Resource: !Sub arn:aws:logs:*:*:*
+        - Effect: Allow
+          Action: secretsmanager:GetSecretValue
+          Resource: !Sub arn:aws:secretsmanager:us-west-2:496911069803:secret:flask-dba-user-Gb5f2o
+
       Roles:
       - Ref: InstanceRole
 
