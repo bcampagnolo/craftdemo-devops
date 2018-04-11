@@ -15,6 +15,7 @@ Resources:
           Principal:
             Service:
             - ec2.amazonaws.com
+            - codedeploy.amazonaws.com
           Action:
           - sts:AssumeRole
       Path: /
